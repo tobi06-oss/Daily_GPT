@@ -22,7 +22,7 @@ export function makeLog(kind:'wake'|'sleep',hour:number,source:'app'|'shortcut'=
 export function goalFromText(raw:string){const m=raw.match(/(?:주\s*(\d)|일주일에\s*(\d)\s*번)\s*(.*)/);if(!m)return null;const n=Number(m[1]||m[2]);if(n<1||n>7)return null;const name=m[3].trim().replace(/^(회|번)\s*/, '').trim();return{title:name||'새 목표',per_week:n}}
 function validEvent(e:EventLite,d:string){if(e.except?.includes(d)||d<e.date)return false;if(e.repeat==='daily')return true;if(e.repeat==='weekly')return e.days.includes(new Date(d+'T12:00:00').getDay());if(e.repeat==='monthly')return Number(d.slice(8))===Number(e.date.slice(8));return d===e.date}
 const promptList=['오늘 가장 좋았던 순간은?','오늘 나를 웃게 한 일은?','오늘 가장 기억에 남는 대화는?','오늘의 작은 성취는?','오늘 고마웠던 일은?','오늘 나에게 필요한 말은?','오늘 새롭게 알게 된 건?','평소와 달랐던 순간은?','오늘 마음에 오래 남은 장면은?','내일 기대되는 일이 있나요?']
-function prompt(d:string){return promptList[Number(d.replaceAll('-',''))%promptList.length]}
+export function dailyPrompt(d:string){return promptList[Number(d.replaceAll('-',''))%promptList.length]}
 function fmtDuration(minutes:number){return Math.floor(minutes/60)+'시간 '+minutes%60+'분'}
 function sleepHours(wake:SleepLog,all:SleepLog[]){const prior=all.filter(x=>!x.deleted_at&&x.kind==='sleep'&&ms(x.at)<ms(wake.at)&&ms(wake.at)-ms(x.at)<=24*3600000).sort((a,b)=>ms(b.at)-ms(a.at))[0];return prior?Math.round((ms(wake.at)-ms(prior.at))/60000):null}
 function archived(d:string,months:number,years=0){const dt=new Date(d+'T12:00:00'),originalDay=dt.getDate();dt.setDate(1);dt.setMonth(dt.getMonth()+months);dt.setFullYear(dt.getFullYear()+years);const end=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();dt.setDate(Math.min(originalDay,end));return day(dt)}
@@ -37,7 +37,7 @@ export function Highlights({selected,today,events,allEvents,tasks,entries,data,o
  const upcoming=events.filter(e=>e.start>now).sort((a,b)=>a.start.localeCompare(b.start))[0]
  const nextDay=shift(today,1),tomorrow=allEvents.filter(e=>validEvent(e,nextDay)).sort((a,b)=>a.start.localeCompare(b.start))[0]
  const next=current||upcoming
- const remaining=next?Math.max(0,Math.round((ms((current?selected+'T'+current.end:selected+'T'+next.start))-clock.getTime())/60000)):0
+ const remaining=next?Math.max(0,Math.ceil((ms(selected+'T'+(current?current.end:next.start))-clock.getTime())/60000)):0
  const progress=tasks.length?Math.round(tasks.filter(t=>t.done).length/tasks.length*100):0
  const moodColor:Record<number,string>={1:'#E3C27A',2:'#C5836B',3:'#869B84',4:'#9AA3A8',5:'#A6998B'}
  const previous=[{name:'일주일 전',date:shift(selected,-7)},{name:'한 달 전',date:archived(selected,-1)},{name:'일 년 전',date:archived(selected,0,-1)}].map(x=>({...x,entry:entries.find(e=>e.date===x.date)})).filter(x=>x.entry)
@@ -47,9 +47,9 @@ export function Highlights({selected,today,events,allEvents,tasks,entries,data,o
  <div className="life-week">{weeks(selected).map(d=>{const hasEvents=allEvents.some(e=>validEvent(e,d));const ent=entries.find(e=>e.date===d);const mood=(ent as EntryLite&{mood?:number})?.mood;return <button className={d===selected?'active':''} key={d} onClick={()=>onDay(d)}><small>{'일월화수목금토'[new Date(d+'T12:00:00').getDay()]}</small><b>{Number(d.slice(8))}</b><span className="life-marks">{hasEvents?<i className="event"/>:null}{ent?<i style={{background:mood?moodColor[mood]:'#C5836B'}}/>:null}</span></button>})}</div>
  <div className="life-progress"><div><b>오늘 할 일</b><span>{tasks.filter(t=>t.done).length}/{tasks.length} 완료</span></div><div className="life-track"><i style={{width:progress+'%'}}/></div></div>
  {streak>=2?<div className="life-streak">✿ {streak}일째 이야기를 남기고 있어요</div>:null}
- <div className="life-prompt" onClick={onJournal} role="button" tabIndex={0} onKeyDown={e=>{if(e.key==='Enter')onJournal()}}><span>✎ 오늘의 질문</span><b>{prompt(selected)}</b><small>한 문장만 남겨도 좋아요 ›</small></div>
+ <div className="life-prompt" onClick={onJournal} role="button" tabIndex={0} onKeyDown={e=>{if(e.key==='Enter')onJournal()}}><span>✎ 오늘의 질문</span><b>{dailyPrompt(selected)}</b><small>한 문장만 남겨도 좋아요 ›</small></div>
  {previous.length?<div className="life-previous"><b>지난 오늘</b>{previous.map(x=><button key={x.name} onClick={()=>onDay(x.date)}><small>{x.name} · {x.date}</small><span>{x.entry?.line}</span><i>›</i></button>)}</div>:null}
- {h>=18&&todays?<div className="life-evening">☾ 오늘의 마무리 · 일정 {events.length} · 할 일 {tasks.filter(t=>t.done).length}/{tasks.length} · {prompt(selected)}</div>:null}
+ {h>=18&&todays?<div className="life-evening">☾ 오늘의 마무리 · 일정 {events.length} · 할 일 {tasks.filter(t=>t.done).length}/{tasks.length} {data.goals.filter(g=>!g.deleted_at).map(g=>({title:g.title,done:goalChecked(g.id,selected,data)})).filter(g=>g.done).slice(0,1).map(g=>' · '+g.title+' ✓').join('')} · {dailyPrompt(selected)}</div>:null}
  </div>
 }
 export function GoalsPanel({selected,data,update}:{selected:string;data:Extras;update:Update}){
