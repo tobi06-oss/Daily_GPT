@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {Highlights,GoalsPanel,SleepPanel,SettingsPanel,ShortcutPanel,LinkedGoal,goalFromText,belongingDate,type Goal,type GoalCheck,type SleepLog,type Extras} from './Lifestyle';
+import {Highlights,GoalsPanel,SleepPanel,SettingsPanel,ShortcutPanel,LinkedGoal,goalFromText,dailyPrompt,type Goal,type GoalCheck,type SleepLog,type Extras} from './Lifestyle';
 
 type Kind='event'|'task'|'journal'|'goal';
 type Repeat='none'|'daily'|'weekly'|'monthly';
