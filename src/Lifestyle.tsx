@@ -90,3 +90,50 @@ export function SettingsPanel({data,update,onClose}:{data:Extras;update:Update;o
  return <div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="sheet life-settings"><header><h2>나의 설정</h2><button onClick={onClose} aria-label="닫기">×</button></header><label className="life-setting-row">하루 시작 시각 <select value={data.user_settings.day_start_hour} onChange={e=>update(s=>({...s,user_settings:{...s.user_settings,day_start_hour:Number(e.target.value)}}))}>{Array.from({length:7},(_,i)=><option key={i} value={i}>새벽 {i}시</option>)}</select></label><h3>잠금화면 바로가기 주소</h3>{routes.map(([route,label])=><div className="life-setting-route" key={route}><div><b>{label}</b><small>{base+route}</small></div><button onClick={()=>void copy(base+route)}>복사</button></div>)}<p className="life-warning">중요: iPhone 단축어의 URL 열기는 Safari에서 실행될 수 있어요. Safari와 홈 화면 PWA의 기록은 공유되지 않을 수 있으므로 잠금화면에서 남긴 기록이 앱에 자동 반영된다고 보장할 수 없어요</p><div className="life-shortcut-help"><b>아이폰 단축어 만들기</b><p>단축어 앱 → 새 단축어 → URL → 위 주소 붙여넣기 → URL 열기 → 단축어 이름 지정 → 잠금화면에서 단축어 선택</p><p>기상·취침을 잠금화면 한 번의 동작으로 확실히 동기화하려면 인증된 서버 저장 또는 별도 iCloud 기록 후 가져오기 방식이 필요해요</p></div>{notice?<p role="status">{notice}</p>:null}</div></div>
 }
 export function ShortcutPanel({kind,data,update,onClose}:{kind:'wake'|'sleep';data:Extras;update:Update;onClose:()=>void}){return <div className="overlay"><div className="sheet life-settings"><h2>{kind==='wake'?'☀ 일어났어요':'☾ 잘게요'}</h2><p>지금 시각을 기록할까요?</p><p className="life-warning">단축어로 Safari에서 열었다면 홈 화면 앱과 기록이 분리될 수 있어요</p><div className="life-sleep-actions"><button className="main" onClick={()=>{update(x=>({...x,sleep_logs:[...x.sleep_logs,makeLog(kind,x.user_settings.day_start_hour,'shortcut')]}));onClose()}}>지금 기록하기</button><button onClick={onClose}>취소</button></div></div></div>}
+
+
+/** Compact controls first, deeper weekly goals and sleep history on demand */
+export function RhythmOverview({selected,data,update}:{selected:string;data:Extras;update:Update}){
+ const [open,setOpen]=useState<'goals'|'sleep'|null>(null)
+ const [message,setMessage]=useState('')
+ const activeGoals=data.goals.filter(g=>!g.deleted_at)
+ const week=weeks(selected)
+ const mainGoal=activeGoals[0]
+ const checked=mainGoal?week.filter(d=>goalChecked(mainGoal.id,d,data)).length:0
+ const logs=data.sleep_logs.filter(l=>!l.deleted_at).sort((a,b)=>ms(b.at)-ms(a.at))
+ const wake=logs.find(l=>l.kind==='wake')
+ const minutes=wake?sleepHours(wake,logs):null
+ const h=new Date().getHours()
+ const primary:'wake'|'sleep'=h>=4&&h<16?'wake':'sleep'
+ const now=Date.now()
+ const justLogged=logs.some(l=>l.kind===primary&&Math.abs(now-ms(l.at))<2*60000)
+ const isToday=selected===day(new Date())
+ function quickSleep(){
+   if(justLogged){setMessage('방금 기록했어요');return}
+   update(x=>({...x,sleep_logs:[...x.sleep_logs,makeLog(primary,x.user_settings.day_start_hour)]}))
+   setMessage(primary==='wake'?'기상 시각을 기록했어요':'취침 시각을 기록했어요')
+ }
+ return <section className="rhythm-dashboard" aria-label="이번 주 생활 리듬">
+   <div className="rhythm-title"><h2>나의 리듬</h2><span>기록은 가볍게, 변화는 차곡차곡</span></div>
+   <div className="rhythm-cards">
+     <div className="rhythm-card">
+       <button className="rhythm-card-main" onClick={()=>setOpen(open==='goals'?null:'goals')} aria-expanded={open==='goals'}>
+         <span className="rhythm-legend"><span className="rhythm-icon">◎</span> 이번 주 목표</span>
+         <strong>{mainGoal?mainGoal.title+' · '+checked+'/'+mainGoal.per_week+'회':'목표를 정해 볼까요'}</strong>
+         <span className="rhythm-expand">{open==='goals'?'접기':'요일별 기록 보기'} <span aria-hidden="true">{open==='goals'?'⌃':'⌄'}</span></span>
+       </button>
+     </div>
+     <div className="rhythm-card">
+       <button className="rhythm-card-main" onClick={()=>setOpen(open==='sleep'?null:'sleep')} aria-expanded={open==='sleep'}>
+         <span className="rhythm-legend"><span className="rhythm-icon moon">☾</span> 지난밤 수면</span>
+         <strong>{minutes!==null?fmtDuration(minutes):'수면 기록을 남겨봐요'}</strong>
+         <span className="rhythm-expand">{open==='sleep'?'접기':'수면 내역 보기'} <span aria-hidden="true">{open==='sleep'?'⌃':'⌄'}</span></span>
+       </button>
+       {isToday?<button className="rhythm-one-tap" onClick={quickSleep} aria-label={primary==='wake'?'지금 기상 시각 기록':'지금 취침 시각 기록'}>{justLogged?'✓ 방금 기록':primary==='wake'?'☀ 일어났어요':'☾ 잘게요'}</button>:null}
+     </div>
+   </div>
+   {message?<p className="rhythm-message" role="status">{message}</p>:null}
+   {open==='goals'?<GoalsPanel selected={selected} data={data} update={update}/>:null}
+   {open==='sleep'?<SleepPanel selected={selected} data={data} update={update}/>:null}
+ </section>
+}
